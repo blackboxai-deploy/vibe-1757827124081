@@ -1,0 +1,381 @@
+// CODEN Co-Working Space Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Authentication & User Management
+model User {
+  id            String    @id @default(cuid())
+  employeeId    String?   @unique // For admin/staff login
+  email         String    @unique
+  name          String
+  phone         String?
+  whatsapp      String?   @unique
+  role          UserRole  @default(CUSTOMER)
+  googleId      String?   @unique
+  avatar        String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  bookings      Booking[]
+  payments      Payment[]
+  forumPosts    ForumPost[]
+  forumComments ForumComment[]
+  shifts        Shift[]
+  parkingSlots  ParkingSlot[]
+  vehicles      Vehicle[]
+  
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+  CUSTOMER
+}
+
+// Business Management
+model BusinessSettings {
+  id          String    @id @default(cuid())
+  isOpen      Boolean   @default(true)
+  openTime    String    @default("08:00")
+  closeTime   String    @default("22:00")
+  timezone    String    @default("Asia/Jakarta")
+  currency    String    @default("IDR")
+  updatedAt   DateTime  @updatedAt
+  updatedBy   String
+  
+  @@map("business_settings")
+}
+
+// Area & Product Management
+model Area {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  capacity    Int
+  isActive    Boolean     @default(true)
+  images      String[]    // Array of image URLs
+  videos      String[]    // Array of video URLs
+  amenities   String[]    // WiFi, AC, Projector, etc.
+  location    String?     // Floor, section details
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Relations
+  pricingTiers PricingTier[]
+  bookings     Booking[]
+  
+  @@map("areas")
+}
+
+model PricingTier {
+  id          String      @id @default(cuid())
+  areaId      String
+  type        PricingType
+  duration    Int         // in minutes
+  price       Decimal     @db.Decimal(10, 2)
+  isActive    Boolean     @default(true)
+  
+  // Relations
+  area        Area        @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  
+  @@map("pricing_tiers")
+}
+
+enum PricingType {
+  HOURLY
+  PACKAGE
+  DAILY
+  BI_DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+// Booking Management
+model Booking {
+  id              String        @id @default(cuid())
+  userId          String
+  areaId          String
+  checkInCode     String        @unique
+  startTime       DateTime
+  endTime         DateTime
+  duration        Int           // in minutes
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  status          BookingStatus @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  internetAccess  Boolean       @default(false)
+  username        String?       // Mikrotik username
+  password        String?       // Mikrotik password
+  addOns          Json?         // F&B orders, extra services
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  user            User          @relation(fields: [userId], references: [id])
+  area            Area          @relation(fields: [areaId], references: [id])
+  payments        Payment[]
+  
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIAL
+  REFUNDED
+  FAILED
+}
+
+// Payment Management
+model Payment {
+  id              String        @id @default(cuid())
+  bookingId       String?
+  userId          String
+  amount          Decimal       @db.Decimal(10, 2)
+  method          PaymentMethod
+  xenditId        String?       @unique
+  qrisCode        String?
+  status          PaymentStatus @default(PENDING)
+  paidAt          DateTime?
+  failedAt        DateTime?
+  metadata        Json?         // Xendit webhook data
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  booking         Booking?      @relation(fields: [bookingId], references: [id])
+  user            User          @relation(fields: [userId], references: [id])
+  
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  QRIS
+  BANK_TRANSFER
+  CASH
+  CREDIT_CARD
+}
+
+// Food & Beverage Menu
+model MenuItem {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal     @db.Decimal(10, 2)
+  category    MenuCategory
+  image       String?
+  isAvailable Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  @@map("menu_items")
+}
+
+enum MenuCategory {
+  FOOD
+  BEVERAGE
+  SNACK
+  COMBO
+}
+
+// Parking Management
+model ParkingSlot {
+  id          String        @id @default(cuid())
+  slotNumber  String        @unique
+  area        String        // Indoor, Outdoor, VIP
+  vehicleType VehicleType
+  isOccupied  Boolean       @default(false)
+  attendantId String?
+  
+  // Relations
+  attendant   User?         @relation(fields: [attendantId], references: [id])
+  vehicles    Vehicle[]
+  
+  @@map("parking_slots")
+}
+
+model Vehicle {
+  id            String      @id @default(cuid())
+  ownerId       String
+  plateNumber   String      @unique
+  type          VehicleType
+  brand         String?
+  model         String?
+  color         String?
+  parkingSlotId String?
+  checkedInAt   DateTime?
+  checkedOutAt  DateTime?
+  
+  // Relations
+  owner         User        @relation(fields: [ownerId], references: [id])
+  parkingSlot   ParkingSlot? @relation(fields: [parkingSlotId], references: [id])
+  
+  @@map("vehicles")
+}
+
+enum VehicleType {
+  MOTORCYCLE
+  CAR
+  BICYCLE
+  OTHER
+}
+
+// Staff Management
+model Shift {
+  id        String    @id @default(cuid())
+  staffId   String
+  startTime DateTime
+  endTime   DateTime
+  type      ShiftType
+  notes     String?
+  createdAt DateTime  @default(now())
+  
+  // Relations
+  staff     User      @relation(fields: [staffId], references: [id])
+  
+  @@map("shifts")
+}
+
+enum ShiftType {
+  MORNING
+  AFTERNOON
+  EVENING
+  NIGHT
+  FULL_DAY
+}
+
+// Forum & Community
+model ForumPost {
+  id          String         @id @default(cuid())
+  authorId    String
+  title       String
+  content     String
+  category    String
+  tags        String[]
+  images      String[]       // Image URLs
+  videos      String[]       // Video URLs
+  isPublished Boolean        @default(true)
+  isPinned    Boolean        @default(false)
+  viewCount   Int            @default(0)
+  likeCount   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  
+  // Relations
+  author      User           @relation(fields: [authorId], references: [id])
+  comments    ForumComment[]
+  
+  @@map("forum_posts")
+}
+
+model ForumComment {
+  id        String    @id @default(cuid())
+  postId    String
+  authorId  String
+  content   String
+  parentId  String?   // For nested replies
+  isHidden  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  // Relations
+  post      ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
+  parent    ForumComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   ForumComment[] @relation("CommentReplies")
+  
+  @@map("forum_comments")
+}
+
+// Feedback & NPS
+model Feedback {
+  id          String      @id @default(cuid())
+  userId      String?
+  bookingId   String?
+  npsScore    Int?        @db.SmallInt // 0-10 scale
+  rating      Int?        @db.SmallInt // 1-5 stars
+  category    String
+  subject     String?
+  message     String
+  isAnonymous Boolean     @default(false)
+  status      FeedbackStatus @default(NEW)
+  response    String?
+  respondedAt DateTime?
+  createdAt   DateTime    @default(now())
+  
+  @@map("feedback")
+}
+
+enum FeedbackStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+// WhatsApp Integration
+model WhatsAppMessage {
+  id          String            @id @default(cuid())
+  userId      String?
+  phone       String
+  message     String
+  type        WhatsAppMessageType
+  status      MessageStatus     @default(PENDING)
+  externalId  String?           // Fonnte message ID
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  createdAt   DateTime          @default(now())
+  
+  @@map("whatsapp_messages")
+}
+
+enum WhatsAppMessageType {
+  CHECK_IN_CODE
+  BOOKING_CONFIRMATION
+  PAYMENT_REMINDER
+  INTERNET_CREDENTIALS
+  THANK_YOU
+  GENERAL
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+// Analytics & Reporting
+model Analytics {
+  id        String    @id @default(cuid())
+  date      DateTime  @db.Date
+  metric    String    // revenue, bookings, occupancy, etc.
+  value     Decimal   @db.Decimal(15, 2)
+  metadata  Json?     // Additional data
+  createdAt DateTime  @default(now())
+  
+  @@unique([date, metric])
+  @@map("analytics")
+}
